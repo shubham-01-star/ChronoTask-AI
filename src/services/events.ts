@@ -8,4 +8,5 @@ export const dashboardEvents = new DashboardEventEmitter();
 export const EVENTS = {
   TELEMETRY_INGESTED: 'telemetry_ingested',
   REMEDIATION_CREATED: 'remediation_created',
+  TASK_TOGGLED: 'task_toggled',
 };

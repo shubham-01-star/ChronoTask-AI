@@ -5,6 +5,7 @@ const API_KEY = 'ct_live_acmedemo12345';
 
 // State management for client-side self-healing
 const taskBackoffs = new Map<string, number>(); // task_name -> timestamp until which it is suspended
+const manuallySuspendedTasks = new Set<string>();
 let stripeAttemptNumber = 1;
 
 /**
@@ -62,6 +63,15 @@ function connectToRemediationStream() {
             const event = JSON.parse(rawJson);
             if (event.type === 'REMEDIATION_CREATED') {
               applyRemediation(event.data);
+            } else if (event.type === 'TASK_TOGGLED') {
+              const task = event.data;
+              if (task.status === 'SUSPENDED') {
+                manuallySuspendedTasks.add(task.task_name);
+                console.log(`[Self-Healing Engine] Task "${task.task_name}" status set to SUSPENDED. Suspending execution.`);
+              } else {
+                manuallySuspendedTasks.delete(task.task_name);
+                console.log(`[Self-Healing Engine] Task "${task.task_name}" status set to ACTIVE. Resuming execution.`);
+              }
             }
           } catch (e) {
             // Ignore keep-alives or non-JSON payloads
@@ -102,6 +112,11 @@ function applyRemediation(data: any) {
  * Checks if a task is currently suspended by the self-healing backoff logic
  */
 function isTaskSuspended(taskName: string): boolean {
+  if (manuallySuspendedTasks.has(taskName)) {
+    console.log(`[Task Scheduler] "${taskName}" execution blocked: suspended by Admin in SRE Dashboard.`);
+    return true;
+  }
+
   const suspendUntil = taskBackoffs.get(taskName);
   if (!suspendUntil) return false;
   
@@ -123,6 +138,10 @@ function isTaskSuspended(taskName: string): boolean {
 // 1. Success Task: daily_report_generator
 function runDailyReportGenerator() {
   console.log('\n[Task Trigger] Executing "daily_report_generator"...');
+  
+  if (isTaskSuspended('daily_report_generator')) {
+    return;
+  }
   
   // Simulating report generation
   const start = Date.now();
@@ -212,6 +231,26 @@ function runImageProcessor() {
   }, 600);
 }
 
+/**
+ * Syncs the initial suspended tasks list from the backend
+ */
+async function fetchInitialSuspendedTasks() {
+  try {
+    const res = await fetch(`${CHRONOTASK_API_URL}/dashboard/tasks`);
+    if (res.ok) {
+      const tasks = await res.json() as any[];
+      for (const t of tasks) {
+        if (t.status === 'SUSPENDED') {
+          manuallySuspendedTasks.add(t.task_name);
+          console.log(`[Self-Healing Engine] Initial Sync: Task "${t.task_name}" is currently SUSPENDED.`);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error(`[Self-Healing Engine] Failed to fetch initial task statuses:`, err.message);
+  }
+}
+
 // ----------------------------------------------------
 // RUNNER INITIALIZATION
 // ----------------------------------------------------
@@ -223,7 +262,9 @@ console.log('========================================================\n');
 // Start SSE stream client listener
 connectToRemediationStream();
 
-// Schedule loops to simulate cron triggers
-setInterval(runDailyReportGenerator, 10000); // every 10 seconds
-setInterval(runStripeInvoiceSync, 12000);     // every 12 seconds
-setInterval(runImageProcessor, 15000);         // every 15 seconds
+// Sync initial task statuses and then start scheduling
+fetchInitialSuspendedTasks().then(() => {
+  setInterval(runDailyReportGenerator, 10000); // every 10 seconds
+  setInterval(runStripeInvoiceSync, 12000);     // every 12 seconds
+  setInterval(runImageProcessor, 15000);         // every 15 seconds
+});
