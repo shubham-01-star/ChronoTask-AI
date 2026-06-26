@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../db/pool';
 import { dashboardEvents, EVENTS } from '../services/events';
+import * as crypto from 'crypto';
 
 const router = Router();
 
@@ -84,10 +85,15 @@ router.get('/stream', (req: Request, res: Response) => {
     res.write('data: ' + JSON.stringify({ type: 'TASK_TOGGLED', data }) + '\n\n');
   };
 
+  const onKeyRotated = (data: any) => {
+    res.write('data: ' + JSON.stringify({ type: 'KEY_ROTATED', data }) + '\n\n');
+  };
+
   // Subscribe to internal events
   dashboardEvents.on(EVENTS.TELEMETRY_INGESTED, onTelemetryIngested);
   dashboardEvents.on(EVENTS.REMEDIATION_CREATED, onRemediationCreated);
   dashboardEvents.on(EVENTS.TASK_TOGGLED, onTaskToggled);
+  dashboardEvents.on(EVENTS.KEY_ROTATED, onKeyRotated);
 
   // Send periodic keep-alive pings to prevent timeout
   const keepAliveInterval = setInterval(() => {
@@ -101,6 +107,7 @@ router.get('/stream', (req: Request, res: Response) => {
     dashboardEvents.off(EVENTS.TELEMETRY_INGESTED, onTelemetryIngested);
     dashboardEvents.off(EVENTS.REMEDIATION_CREATED, onRemediationCreated);
     dashboardEvents.off(EVENTS.TASK_TOGGLED, onTaskToggled);
+    dashboardEvents.off(EVENTS.KEY_ROTATED, onKeyRotated);
     res.end();
   });
 });
@@ -243,6 +250,112 @@ router.get('/tenant', async (req: Request, res: Response): Promise<void> => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching tenant details:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /api/v1/dashboard/tenant/update
+ * Updates the tenant organization name.
+ */
+router.post('/tenant/update', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { company_name } = req.body;
+    if (!company_name || company_name.trim() === '') {
+      res.status(400).json({ error: 'Company name is required' });
+      return;
+    }
+
+    const result = await pool.query(
+      'UPDATE tenants SET company_name = $1 RETURNING id, company_name, created_at, api_key_hash',
+      [company_name.trim()]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+
+    res.json({ success: true, tenant: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating tenant organization:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /api/v1/dashboard/tenant/rotate-key
+ * Rotates the developer API access token.
+ */
+router.post('/tenant/rotate-key', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Generate a fresh random key: ct_live_ + 16 random hex chars
+    const rotatedApiKey = 'ct_live_' + crypto.randomBytes(8).toString('hex');
+    
+    // Hash the key using salt
+    const salt = process.env.API_KEY_SALT || '';
+    const hashedKey = crypto
+      .createHash('sha256')
+      .update(rotatedApiKey + salt)
+      .digest('hex');
+
+    const result = await pool.query(
+      'UPDATE tenants SET api_key_hash = $1 RETURNING id, company_name, created_at, api_key_hash',
+      [hashedKey]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+
+    const tenant = result.rows[0];
+
+    // Emit key rotated event to SSE stream
+    dashboardEvents.emit(EVENTS.KEY_ROTATED, {
+      task_name: 'System Control',
+      api_key: rotatedApiKey,
+      status: 'UPDATED',
+    });
+
+    res.json({
+      success: true,
+      raw_api_key: rotatedApiKey,
+      tenant,
+    });
+  } catch (error) {
+    console.error('Error rotating tenant credentials:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /api/v1/dashboard/tasks/:id/update-retries
+ * Updates max retry limit of a scheduled cron job queue.
+ */
+router.post('/tasks/:id/update-retries', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { max_retries } = req.body;
+    
+    if (max_retries === undefined || isNaN(parseInt(max_retries)) || parseInt(max_retries) < 0) {
+      res.status(400).json({ error: 'Invalid max_retries value. Must be a non-negative integer.' });
+      return;
+    }
+
+    const result = await pool.query(
+      'UPDATE cron_tasks SET max_retries = $1 WHERE id = $2 RETURNING id, task_name, max_retries',
+      [parseInt(max_retries), id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+
+    res.json({ success: true, task: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating task retries:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

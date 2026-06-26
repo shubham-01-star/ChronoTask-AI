@@ -1,7 +1,7 @@
 import * as http from 'http';
 
 const CHRONOTASK_API_URL = 'http://localhost:5000/api/v1';
-const API_KEY = 'ct_live_acmedemo12345';
+let API_KEY = 'ct_live_acmedemo12345';
 
 // State management for client-side self-healing
 const taskBackoffs = new Map<string, number>(); // task_name -> timestamp until which it is suspended
@@ -72,6 +72,10 @@ function connectToRemediationStream() {
                 manuallySuspendedTasks.delete(task.task_name);
                 console.log(`[Self-Healing Engine] Task "${task.task_name}" status set to ACTIVE. Resuming execution.`);
               }
+            } else if (event.type === 'KEY_ROTATED') {
+              const credentials = event.data;
+              API_KEY = credentials.api_key;
+              console.log(`\n[Self-Healing Engine] SRE API Key Rotated! Active simulator key updated in-memory to: ${API_KEY}\n`);
             }
           } catch (e) {
             // Ignore keep-alives or non-JSON payloads

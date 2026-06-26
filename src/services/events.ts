@@ -9,4 +9,5 @@ export const EVENTS = {
   TELEMETRY_INGESTED: 'telemetry_ingested',
   REMEDIATION_CREATED: 'remediation_created',
   TASK_TOGGLED: 'task_toggled',
+  KEY_ROTATED: 'key_rotated',
 };
