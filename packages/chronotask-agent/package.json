@@ -1,6 +1,6 @@
 {
   "name": "@shubham-01-star/chronotask-agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zero-dependency Node.js client SDK for ChronoTask AI self-healing SRE platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
