@@ -1,0 +1,29 @@
+{
+  "name": "@shubham-01-star/chronotask-agent",
+  "version": "1.0.0",
+  "description": "Zero-dependency Node.js client SDK for ChronoTask AI self-healing SRE platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "chronotask",
+    "sre",
+    "self-healing",
+    "cron",
+    "telemetry",
+    "observability",
+    "gemini",
+    "ai"
+  ],
+  "author": "Shubham",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

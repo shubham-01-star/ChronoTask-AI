@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Compilation output
+dist/
+
+# NPM credentials & configuration
+.npmrc
