@@ -19,3 +19,11 @@ logs/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Scratch testing scripts
+scratch/
+
+# Nested Frontend Repository
+dashboard/
+
+
