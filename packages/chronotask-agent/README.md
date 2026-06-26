@@ -1,14 +1,44 @@
-# @shubham-01-star/chronotask-agent
+# 🌀 ChronoTask AI Client Agent SDK
 
-A zero-dependency Node.js and TypeScript client SDK for integrating scheduled cron jobs, background workers, and queue runners with the **ChronoTask AI Self-Healing SRE Platform**.
+[![NPM Version](https://img.shields.io/npm/v/@shubham-01-star/chronotask-agent.svg?style=flat-rounded&color=007acc)](https://www.npmjs.com/package/@shubham-01-star/chronotask-agent)
+[![Bundle Size](https://img.shields.io/bundlephobia/min/@shubham-01-star/chronotask-agent?color=31c653)](https://bundlephobia.com/package/@shubham-01-star/chronotask-agent)
+[![License](https://img.shields.io/npm/l/@shubham-01-star/chronotask-agent.svg?color=orange)](https://github.com/shubham-01-star/ChronoTask-AI)
+[![Downloads](https://img.shields.io/npm/dm/@shubham-01-star/chronotask-agent.svg)](https://www.npmjs.com/package/@shubham-01-star/chronotask-agent)
 
-It provides automatic telemetry logging, admin-controlled execution suspension, dynamic AI-driven backoffs, and zero-downtime secret API key rotation out-of-the-box.
+A lightweight, zero-dependency Node.js and TypeScript client SDK for integrating scheduled cron jobs, background task runners, and queue consumers with the **ChronoTask AI Self-Healing SRE Platform**.
+
+---
+
+## 🚀 Key Features
+
+*   **⚡ Zero Dependencies**: Extremely lightweight. Built using native Node.js core modules.
+*   **🧬 Closed-Loop Self-Healing**: Connects to the ChronoTask AI real-time event stream. Automatically handles dynamic task suspensions and retry backoffs.
+*   **🔑 Zero-Downtime Credential Rotation**: Synchronizes rotated SRE API access keys in-memory on the fly without interrupting telemetry uploads.
+*   **📊 Automatic Telemetry Logging**: Instantly maps execution duration, status metrics, error reports, and stack traces.
+
+---
+
+## 🗺️ How it Works
+
+```
+                        ┌─────────────────────────────────┐
+                        │   ChronoTask AI Dashboard UI     │
+                        └────────────────┬────────────────┘
+                                         │ Admin Toggles / Key Rotation
+                                         ▼
+   ┌──────────────────┐ Telemetry POST  ┌─────────────────────────────────┐
+   │ My Cron / Worker ├────────────────►│ ChronoTask AI Backend Ingestor  │
+   │   Task Runner    │                 └────────────────┬────────────────┘
+   │                  │ SSE Control Stream               │ Async AI Diagnostics
+   │  (Runs SDK Agent)◄──────────────────────────────────┘
+   └──────────────────┘ (Task Toggle, AI Cooldown, Key Rotation)
+```
 
 ---
 
 ## 📦 Installation
 
-Install the package via npm:
+Install the package via your preferred package manager:
 
 ```bash
 npm install @shubham-01-star/chronotask-agent
@@ -18,54 +48,37 @@ npm install @shubham-01-star/chronotask-agent
 
 ## ⚡ Quick Start
 
-Here is how you can initialize the agent, report task execution status, and set up the self-healing event stream.
+### 1. Basic Ingestion Setup
+The most basic configuration allows logging execution durations, errors, and attempts:
 
 ```typescript
 import { ChronoTaskAgent } from '@shubham-01-star/chronotask-agent';
 
-// Initialize the ChronoTask Agent
+// Initialize the SRE Agent
 const agent = new ChronoTaskAgent({
   apiKey: 'ct_live_your_sre_access_token_here',
-  endpoint: 'http://localhost:5000/api/v1', // Your self-hosted ChronoTask AI endpoint
-  enableSelfHealing: true // Set to false to disable SSE stream listeners
+  endpoint: 'http://localhost:5000/api/v1',
+  enableSelfHealing: false // Standard telemetry tracking only
 });
 
-// Example: Wrap your cron job logic
-async function runDatabaseBackup() {
-  const taskName = 'customer_database_backup';
-  
-  // 1. Check if the task is suspended by the SRE dashboard or active dynamic backoffs
-  if (agent.isSuspended(taskName)) {
-    const remainingCooldown = agent.getRemainingBackoffSeconds(taskName);
-    console.warn(`[Scheduler] Task "${taskName}" execution blocked. Cooldown remaining: ${remainingCooldown}s`);
-    return;
-  }
-
-  const startTime = Date.now();
+async function myTask() {
+  const start = Date.now();
   try {
-    console.log(`[Job] Executing backup...`);
+    // ---> Execute your task workload here <---
     
-    // ---> Place your job code here <---
-    
-    // 2. Report Success Telemetry
     await agent.report({
-      task_name: taskName,
-      cron_expression: '0 2 * * *', // Daily at 2:00 AM
+      task_name: 'database_cleanup_job',
+      cron_expression: '0 0 * * *',
       status: 'SUCCESS',
-      duration_ms: Date.now() - startTime,
+      duration_ms: Date.now() - start,
       attempt_number: 1
     });
-    console.log('[Job] Telemetry success reported.');
-
   } catch (error: any) {
-    console.error('[Job] Execution failed:', error.message);
-    
-    // 3. Report Failure Telemetry (triggers asynchronous Gemini AI diagnostics)
     await agent.report({
-      task_name: taskName,
-      cron_expression: '0 2 * * *',
+      task_name: 'database_cleanup_job',
+      cron_expression: '0 0 * * *',
       status: 'FAILED',
-      duration_ms: Date.now() - startTime,
+      duration_ms: Date.now() - start,
       attempt_number: 1,
       error_summary: error.message,
       stack_trace: error.stack
@@ -76,58 +89,108 @@ async function runDatabaseBackup() {
 
 ---
 
-## 🌀 Self-Healing Event Listeners
+### 2. Full Self-Healing Setup (Closed-Loop)
+By enabling `enableSelfHealing`, the agent connects to the ChronoTask control plane over SSE, applying dynamic administrative and AI-generated blocks automatically.
 
-When `enableSelfHealing` is active, the agent automatically connects to the server stream and updates its internal blacklist and cooldown timers in real-time. You can listen to these events to customize logging or apply custom rules:
-
-### 1. AI Remediations & Backoffs
-Triggered when Gemini AI finishes analyzing a failure and recommends a dynamic backoff/patch:
 ```typescript
-agent.onRemediation((data) => {
-  console.log(`[AI Alert] Recommended Action: ${data.action_taken}`);
-  console.log(`[AI Alert] Suggested Fix: \n${data.suggested_fix}`);
+import { ChronoTaskAgent } from '@shubham-01-star/chronotask-agent';
+
+const agent = new ChronoTaskAgent({
+  apiKey: 'ct_live_your_sre_access_token_here',
+  endpoint: 'http://localhost:5000/api/v1',
+  enableSelfHealing: true // Opens real-time control connection
 });
-```
 
-### 2. Administrative Suspensions
-Triggered when an SRE/Administrator toggles the status of a queue directly from the ChronoTask AI dashboard:
-```typescript
+// Configure hooks to print SRE events
+agent.onRemediation((remediation) => {
+  console.log(`[AI Diagnostics] Recommended Backoff Action: ${remediation.action_taken}`);
+  console.log(`[AI Diagnostics] Recommended Fix Code Patch:\n${remediation.suggested_fix}`);
+});
+
 agent.onTaskToggled((task) => {
-  console.log(`[Admin Alert] Task "${task.task_name}" status set to ${task.status}`);
+  console.log(`[SRE Admin Action] Task "${task.task_name}" changed state to: ${task.status}`);
 });
-```
 
-### 3. Credentials Rotation
-Triggered when you rotate keys on the dashboard. The client synchronizes the new key in-memory instantly, maintaining zero-downtime ingestion:
-```typescript
 agent.onKeyRotated((newKey) => {
-  console.log(`[Auth Alert] Telemetry API Key rotated to: ${newKey}`);
+  console.log(`[Security Alert] Access key rotated! Syncing token in-memory to: ${newKey}`);
 });
+
+// Wrapping the schedule execution block:
+async function runStripeInvoiceSync() {
+  const taskName = 'stripe_invoice_sync';
+
+  // 1. Safety check: Block execution if task is suspended or in AI cooldown backoff
+  if (agent.isSuspended(taskName)) {
+    const cooldownLeft = agent.getRemainingBackoffSeconds(taskName);
+    console.warn(`[Execution Blocked] Task "${taskName}" is suspended. Cooldown: ${cooldownLeft}s`);
+    return;
+  }
+
+  const start = Date.now();
+  try {
+    // ---> Execute Stripe Sync logic <---
+
+    await agent.report({
+      task_name: taskName,
+      cron_expression: '*/10 * * * *',
+      status: 'SUCCESS',
+      duration_ms: Date.now() - start,
+      attempt_number: 1
+    });
+  } catch (err: any) {
+    await agent.report({
+      task_name: taskName,
+      cron_expression: '*/10 * * * *',
+      status: 'FAILED',
+      duration_ms: Date.now() - start,
+      attempt_number: 1,
+      error_summary: err.message,
+      stack_trace: err.stack
+    });
+  }
+}
 ```
 
 ---
 
 ## 📖 API Reference
 
-### `new ChronoTaskAgent(config: ChronoTaskAgentConfig)`
-Instantiates a new ChronoTask SRE client agent.
-*   `apiKey` (string, required): Developer access key obtained from Settings panel.
-*   `endpoint` (string, optional): Base telemetry API URL. Defaults to `http://localhost:5000/api/v1`.
-*   `enableSelfHealing` (boolean, optional): Connects to the SSE stream to handle events in-memory. Defaults to `true`.
+### Configurations
+```typescript
+interface ChronoTaskAgentConfig {
+  apiKey: string;              // Telemetry credentials from dashboard settings
+  endpoint?: string;           // ChronoTask Ingestion endpoint. Defaults to 'http://localhost:5000/api/v1'
+  enableSelfHealing?: boolean; // Toggles Server-Sent Event stream listeners. Defaults to true
+}
+```
 
-### `agent.report(payload: TelemetryPayload): Promise<{ success: boolean; execution_id?: string; error?: string }>`
-Ingests execution telemetry. Triggers AI diagnostic queue automatically if status is `'FAILED'`.
+### Methods
 
-### `agent.isSuspended(taskName: string): boolean`
-Returns `true` if the task is currently suspended by an administrator or under active dynamic backoff cooldown.
+#### `report(payload: TelemetryPayload): Promise<{ success: boolean; execution_id?: string; error?: string }>`
+Sends execution logs to the database. If the status is `'FAILED'`, triggers the asynchronous Gemini AI agent diagnostic pipeline.
 
-### `agent.getRemainingBackoffSeconds(taskName: string): number`
-Returns the remaining cooldown duration in seconds for tasks undergoing dynamic backoffs.
+#### `isSuspended(taskName: string): boolean`
+Returns `true` if the task has been paused manually by an SRE administrator, or is temporarily throttle-blocked during an active dynamic backoff cooldown.
 
-### `agent.disconnect()`
-Gracefully closes the persistent SSE connection stream.
+#### `getRemainingBackoffSeconds(taskName: string): number`
+Returns the remaining cooldown time in seconds for backoff thorttling. Returns `0` if not throttled.
+
+#### `disconnect(): void`
+Gracefully unsubscribes from the control SSE streams and releases socket connections.
+
+### SSE Event Hooks
+
+#### `onRemediation(callback: (remediation: any) => void): void`
+Subscribes to asynchronous AI diagnostic updates when Gemini finishes analysis.
+
+#### `onTaskToggled(callback: (task: any) => void): void`
+Subscribes to real-time administrative suspensions / activations.
+
+#### `onKeyRotated(callback: (apiKey: string) => void): void`
+Subscribes to zero-downtime key rotation operations.
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+
+This SDK is open-source software licensed under the [MIT License](LICENSE).
