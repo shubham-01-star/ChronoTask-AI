@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+test-client/node_modules/
+
+# Compilation output
+dist/
+test-client/dist/
+
+# Environmental variables / secrets
+.env
+.env.production
+.env.development
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Operating system files
+.DS_Store
+Thumbs.db

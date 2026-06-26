@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chronotask-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_password
+      POSTGRES_DB: chronotask_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chronotask_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chronotask-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronotask-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - chronotask-net
+
+networks:
+  chronotask-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
